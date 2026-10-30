@@ -1,0 +1,24 @@
+# Never commit secrets, databases or statements
+.env
+*.db
+*.sqlite
+*.csv
+*.xlsx
+*.xls
+*.pdf
+statements/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vitest-cache/
+
+# ...except the made-up statements used by the tests
+!backend/tests/fixtures/*.pdf

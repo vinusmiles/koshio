@@ -9,11 +9,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from .. import ai
 from ..importer import classify, engine
+from ..seed import ensure_categories
 from ..importer.pdf import PdfPasswordError
 from ..importer.readers import MAX_PDF_BYTES, ReadError, read_statement
 from ..periods import today_ist
-from ..models import Account, Category, ImportBatch, ImportIssue, Transaction, User
+from ..models import (Account, AiCategoryCache, Category, ImportBatch, ImportIssue, PayeeRule, Transaction,
+                      User)
 from ..schemas import REQUIRED_DIRECTION, TxnType
 from ..security import current_user
 from .common import get_owned
@@ -84,14 +87,21 @@ def _analyse(db: Session, user: User, acc: Account, filename: str, data: bytes, 
     existing = set(db.scalars(select(Transaction.fingerprint).where(
         Transaction.user_id == user.id, Transaction.account_id == acc.id,
         Transaction.fingerprint.is_not(None))).all())
-    # Your own past choices: the latest category you gave each merchant.
+    # Your own past choices: the latest category you gave each payee (UPI ID) and merchant.
     learned: dict[str, int] = {}
-    for merchant, cat in db.execute(
-            select(Transaction.merchant_name, Transaction.category_id)
-            .where(Transaction.user_id == user.id, Transaction.merchant_name.is_not(None),
-                   Transaction.category_id.is_not(None), Transaction.is_reviewed.is_(True))
+    for merchant, payee, cat in db.execute(
+            select(Transaction.merchant_name, Transaction.payee_key, Transaction.category_id)
+            .where(Transaction.user_id == user.id, Transaction.category_id.is_not(None),
+                   Transaction.is_reviewed.is_(True))
             .order_by(Transaction.updated_at)).all():
-        learned[merchant.lower()] = cat
+        if merchant:
+            learned[merchant.lower()] = cat
+        if payee:
+            learned[payee] = cat
+    rules = dict(db.execute(select(PayeeRule.payee_key, PayeeRule.category_id)
+                            .where(PayeeRule.user_id == user.id)).all())
+    ensure_categories(db, user.id)
+    db.flush()
     cats = dict(db.execute(select(Category.name, Category.id).where(Category.user_id == user.id)).all())
     # UPI references already imported into your other accounts, to spot the same payment twice.
     other_refs = {ref: name for ref, name in db.execute(
@@ -99,14 +109,56 @@ def _analyse(db: Session, user: User, acc: Account, filename: str, data: bytes, 
         .where(Transaction.user_id == user.id, Transaction.account_id != acc.id,
                Transaction.upi_reference.is_not(None), Transaction.duplicate_of_id.is_(None))).all()}
     result = engine.analyse(rows, filename, engine.Options(**opts.model_dump()), account_id=acc.id,
-                            account_type=acc.account_type, today=today_ist(), other_refs=other_refs, existing=existing, learned=learned,
+                            account_type=acc.account_type, today=today_ist(), other_refs=other_refs, rules=rules, existing=existing, learned=learned,
                             categories_by_name=cats)
     if pdf_source:
         result.suggested_source = pdf_source
     elif result.suggested_source == "other" or acc.account_type in ("credit_card", "debit_card", "cash"):
         result.suggested_source = SOURCE_FROM_ACCOUNT.get(acc.account_type, result.suggested_source)
     result.password_index = used
+    result.ai_used = _ai_categorise(db, user, result, cats)
     return result, rows
+
+
+SPENDING_KINDS = {"expense", "refund"}
+
+
+def _ai_categorise(db: Session, user: User, result, cats: dict[str, int]) -> bool:
+    """Fill categories nothing else could, by asking the AI about merchant names only.
+    Answers are cached per user, so a name is sent at most once."""
+    if not (user.ai_categorise and ai.available()):
+        return False
+    todo = {}
+    for r in result.rows:
+        if r.status == "ready" and r.category_id is None and r.transaction_type in SPENDING_KINDS:
+            name = classify.readable_name(r.merchant_name)
+            if name:
+                todo.setdefault(name.lower(), []).append((r, name))
+    if not todo:
+        return False
+    cached = dict(db.execute(select(AiCategoryCache.name_key, AiCategoryCache.answer).where(
+        AiCategoryCache.user_id == user.id, AiCategoryCache.name_key.in_(list(todo)))).all())
+    missing = [items[0][1] for key, items in todo.items() if key not in cached]
+    expense_names = [n for n, k in db.execute(select(Category.name, Category.kind).where(
+        Category.user_id == user.id)).all() if k == "expense"]
+    if missing:
+        answers = ai.suggest_categories(missing, expense_names)
+        for name, answer in answers.items():
+            key = name.lower()[:160]
+            if key not in cached:
+                db.add(AiCategoryCache(user_id=user.id, name_key=key, answer=answer[:60]))
+                cached[key] = answer
+        db.commit()
+    used = False
+    for key, items in todo.items():
+        answer = cached.get(key)
+        for r, _name in items:
+            if answer == ai.PERSON:
+                r.payee_kind = "person"
+            elif answer in cats and answer in expense_names:
+                r.category_id, r.category_source = cats[answer], "ai"
+                used = True
+    return used
 
 
 @router.post("/preview")
@@ -123,7 +175,8 @@ async def preview(file: UploadFile = File(...), account_id: int = Form(...), opt
     out = result.as_dict()
     out["top_rows"] = rows[:40]
     # Which candidate opened the PDF (the website keeps the password itself; it is never sent back).
-    out["password_index"] = result.password_index if tries else None  # lets you pick a different heading row
+    out["password_index"] = result.password_index if tries else None
+    out["ai_used"] = result.ai_used  # lets you pick a different heading row
     out["previous_import"] = None if before is None else {
         "id": before.id, "created_at": before.created_at, "records_imported": before.records_imported}
     return out
@@ -181,6 +234,7 @@ async def commit(file: UploadFile = File(...), account_id: int = Form(...), sour
                 r.funding_source,
                 method or ("upi" if r.upi_reference else "bank_transfer" if acc.account_type == "bank" else "other")),
             funding_source=(r.funding_source or None) and r.funding_source[:120],
+            payee_key=r.payee_key, payee_kind=r.payee_kind,
             description=r.description, raw_description=r.description,
             merchant_name=r.merchant_name, original_merchant_name=r.merchant_name,
             category_id=o.category_id if "category_id" in o.model_fields_set else r.category_id,

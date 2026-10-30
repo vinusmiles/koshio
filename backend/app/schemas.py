@@ -158,6 +158,8 @@ class TransactionOut(BaseModel):
     account_name: str | None = None
     counterparty_account_id: int | None
     funding_source: str | None = None
+    payee_key: str | None = None
+    payee_kind: str | None = None
     notes: str | None
     is_transfer: bool
     is_refund: bool

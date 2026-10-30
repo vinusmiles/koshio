@@ -25,6 +25,10 @@ class Settings(BaseSettings):
 
     environment: str = "development"  # "development" | "production" | "test"
 
+    # Optional: lets Koshio ask Claude to suggest categories from merchant names.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-5-5"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]

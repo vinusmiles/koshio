@@ -13,7 +13,7 @@ export interface Transaction {
   description: string | null; raw_description: string | null;
   category_id: number | null; category_name: string | null;
   account_id: number | null; account_name: string | null; counterparty_account_id: number | null;
-  funding_source: string | null;
+  funding_source: string | null; payee_key: string | null; payee_kind: "shop" | "person" | null;
   notes: string | null; is_transfer: boolean; is_refund: boolean; is_reviewed: boolean;
   import_batch_id: number | null; created_at: string; updated_at: string;
 }
@@ -58,6 +58,8 @@ export interface PreviewRow {
   transaction_date: string | null; time: string | null; description: string | null; merchant_name: string | null;
   amount: string | null; direction: "debit" | "credit" | null; transaction_type: TxnType | null;
   category_id: number | null; reference: string | null; upi_reference: string | null; funding_source: string | null; raw: string[];
+  payee_key: string | null; payee_kind: "shop" | "person" | null;
+  category_source: "type" | "rule" | "history" | "keyword" | "ai" | null;
 }
 export interface Preview {
   header_row: number | null; columns: string[]; mapping: Record<Field, number | null>;
@@ -67,6 +69,7 @@ export interface Preview {
   counts: { detected: number; ready: number; duplicate: number; invalid: number; unrecognised: number };
   date_from: string | null; date_to: string | null; top_rows: string[][];
   previous_import: { id: number; created_at: string; records_imported: number } | null;
+  ai_used?: boolean;
 }
 export interface ImportBatch {
   id: number; filename: string; source_provider: Source; status: "completed" | "completed_with_issues" | "nothing_new";
@@ -75,3 +78,11 @@ export interface ImportBatch {
   date_from: string | null; date_to: string | null; created_at: string; open_issues?: number;
 }
 export interface ImportIssue { id: number; row_number: number; kind: "invalid" | "unrecognised"; message: string; raw: string[]; resolved: boolean }
+
+export interface SortGroup {
+  payee_key: string; name: string; upi_id: string | null; kind: "shop" | "person" | null;
+  count: number; total: string; typical_amount: string | null;
+  first_date: string; last_date: string; usual_time: "morning" | "afternoon" | "evening" | null; sample: string | null;
+}
+export interface SortGroups { groups: SortGroup[]; group_count: number; payment_count: number }
+export interface Me { id: number; email: string; ai_available: boolean; ai_categorise: boolean }

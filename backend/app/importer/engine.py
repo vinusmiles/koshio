@@ -39,6 +39,9 @@ class Row:
     reference: str | None = None
     upi_reference: str | None = None
     funding_source: str | None = None
+    payee_key: str | None = None
+    payee_kind: str | None = None
+    category_source: str | None = None   # type | rule | history | keyword | ai
     fingerprint: str | None = None
     raw: list[str] = field(default_factory=list)
 
@@ -92,7 +95,7 @@ def _norm_key(reference: str | None, description: str | None) -> str:
 
 
 def analyse(rows: list[list[str]], filename: str, opts: Options, *, account_id: int, today: date,
-            other_refs: dict[str, str] | None = None,
+            other_refs: dict[str, str] | None = None, rules: dict[str, int] | None = None,
             account_type: str | None, existing: set[str], learned: dict[str, int],
             categories_by_name: dict[str, int]) -> Result:
     problems: list[str] = []
@@ -140,13 +143,13 @@ def analyse(rows: list[list[str]], filename: str, opts: Options, *, account_id: 
     seen: Counter = Counter()
     for n, r in body:
         out.append(_row(n, r, mapping, date_format, amount_sign, needs_sign, account_id, account_type,
-                        existing, learned, categories_by_name, seen, other_refs or {}))
+                        existing, learned, categories_by_name, seen, other_refs or {}, rules or {}))
     return Result(header_row, header, mapping, date_format, options, ambiguous, amount_sign, needs_sign,
                   source, problems, out)
 
 
 def _row(n, r, mapping, date_format, amount_sign, needs_sign, account_id, account_type,
-         existing, learned, cats, seen, other_refs) -> Row:
+         existing, learned, cats, seen, other_refs, rules) -> Row:
     raw = list(r)
     date_txt = _cell(r, mapping["date"])
     desc = _cell(r, mapping["description"]) or None
@@ -222,7 +225,10 @@ def _row(n, r, mapping, date_format, amount_sign, needs_sign, account_id, accoun
     row.merchant_name, row.upi_reference = merchant, upi_ref
     text = " ".join(filter(None, [desc, _cell(r, mapping["merchant"])]))
     row.transaction_type = classify.guess_type(direction, text, account_type)
-    row.category_id = classify.guess_category(text, row.transaction_type, learned, merchant, cats)
+    row.payee_key = classify.payee_key_for(merchant, desc)
+    row.payee_kind = classify.payee_kind_for(row.payee_key, account_type)
+    row.category_id, row.category_source = classify.guess_category(
+        text, row.transaction_type, learned, merchant, cats, row.payee_key, rules)
 
     key = _norm_key(row.reference, desc)
     base = (d, amount, direction, key)

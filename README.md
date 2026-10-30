@@ -10,7 +10,7 @@ Koshio brings PhonePe, BHIM, bank, card and cash transactions together in one pl
 |---|---|---|
 | 1. Foundation | Database, sign-in, accounts, manual transactions, dashboard | Done |
 | 2. Statement import | PDF (UPI apps, cards, banks), CSV, XLS, XLSX; preview, column mapping, history, duplicate blocking | Done |
-| 3. Analysis | Editable category rules, merchant clean-up, bulk edits, month-on-month, payment-method and merchant charts | Next |
+| 3. Analysis | Automatic categories and Quick sort (done); month-on-month, payment-method and merchant charts, bulk edits | In progress |
 | 4. Reconciliation | Cross-source duplicate matching, linking transfers and card payments | |
 | 5. Advanced | Credit cards page, recurring payments, budgets, reports and exports | |
 | 6. Hardening | Final security review, backups, deployment polish | |
@@ -37,6 +37,16 @@ Koshio brings PhonePe, BHIM, bank, card and cash transactions together in one pl
 - Import history with counts for every file. "Delete import" removes it and every transaction it added, so a bad import is easy to undo.
 - The statement file is read in memory and thrown away. Only the transactions are stored.
 - Imported transactions start as "To review"; the Transactions page has a To review filter.
+
+**Automatic categories (Phase 3, part 1)**
+Every import categorises payments in this order, and each step only handles what the earlier ones couldn't:
+1. Your saved rule for that payee (from Quick sort or "use for every payment to this payee").
+2. The category you gave that payee or merchant before.
+3. Built-in keywords and the merchant category printed on card statements: Groceries, Food, Fuel, Travel, Shopping, Clothing and accessories, Electronics, Utilities, Healthcare, Insurance, Education and more.
+4. Optional AI suggestions: names nothing else recognised (for example "KPN FARM FRESH") are sent to Claude, names only, never amounts, dates, account numbers or UPI IDs. Each name is asked about once and cached. It needs `ANTHROPIC_API_KEY` on the server and can be turned off under Accounts. Suggestions are marked "AI suggestion" in the preview.
+5. Quick sort for what's left: payments are grouped by payee (the UPI ID when there is one), showing how often and how much you paid. One tap categorises the whole group, saves a rule, and applies it to future statements. The overview shows how many payments still need a category.
+
+Koshio also tells shops from people where the UPI ID shows it (`@fbpe`, `paytm.…@pty`, `vyapar.…@hdfcbank` are shop QR codes; `@okicici`, `@oksbi` and phone-number IDs are personal). Payments where BHIM hides the receiver are never grouped together, since they may be different payees.
 
 **Foundation (Phase 1)**
 - Sign-in with email and password. Sign-up closes automatically after the first account, so only you can use your Koshio. Five wrong passwords lock that email for 15 minutes.
@@ -113,7 +123,7 @@ npm run dev                                           # http://localhost:5173
 ## Tests
 
 ```bash
-cd backend && pytest -q          # 85 tests on SQLite
+cd backend && pytest -q          # 113 tests on SQLite
 TEST_DATABASE_URL=postgresql://user:pass@localhost/koshio_test pytest -q   # same tests on Postgres
 cd frontend && npm test          # 12 tests (formatting, password patterns, opening step)
 ```

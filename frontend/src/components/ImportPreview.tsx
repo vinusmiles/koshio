@@ -189,6 +189,9 @@ export function ImportPreview({ file, accountId, onDone, onCancel }: {
           </fieldset>
         )}
         {p.problems.map((m) => <ErrorNote key={m} message={m} />)}
+        {p.ai_used && (
+          <p className="text-sm text-muted">Categories marked <span className="font-semibold text-brass">AI</span> were suggested from merchant names only. Check them before importing.</p>
+        )}
         <button className="text-sm font-semibold text-muted hover:text-ink" onClick={() => setShowCols((v) => !v)} aria-expanded={showCols}>
           {showCols ? "Hide columns" : "Check or change which column is which"}
         </button>
@@ -330,6 +333,11 @@ function ReadyRow({ r, edit, categories, onEdit }: {
                   {categories.filter((c) => c.kind === kind).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               ) : <span className="self-center text-xs text-muted">Not counted as spending or income</span>}
+              {kind && !("category_id" in edit) && r.category_id && (r.category_source === "ai" || r.category_source === "rule" || r.category_source === "history") && (
+                <span className="col-span-2 text-xs font-semibold text-brass">
+                  {r.category_source === "ai" ? "AI suggestion" : "Remembered from your earlier choice"}
+                </span>
+              )}
             </div>
           )}
         </div>

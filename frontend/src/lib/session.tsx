@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, setUnauthorizedHandler, tokenStore } from "./api";
-import type { Account, Category } from "./types";
+import type { Account, Category, Me } from "./types";
 
 interface Session {
   signedIn: boolean;
   email: string | null;
+  me: Me | null;
+  setMe: (m: Me) => void;
   accounts: Account[];
   categories: Category[];
   signIn: (token: string) => Promise<void>;
@@ -20,6 +22,7 @@ const Ctx = createContext<Session | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [signedIn, setSignedIn] = useState(() => !!tokenStore.get());
   const [email, setEmail] = useState<string | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
@@ -35,9 +38,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const load = useCallback(async () => {
     const [me, accs, cats] = await Promise.all([
-      api<{ email: string }>("/auth/me"), api<Account[]>("/accounts"), api<Category[]>("/categories"),
+      api<Me>("/auth/me"), api<Account[]>("/accounts"), api<Category[]>("/categories"),
     ]);
-    setEmail(me.email); setAccounts(accs); setCategories(cats);
+    setEmail(me.email); setMe(me); setAccounts(accs); setCategories(cats);
   }, []);
 
   useEffect(() => { setUnauthorizedHandler(signOut); }, [signOut]);
@@ -49,7 +52,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ signedIn, email, accounts, categories, signIn, signOut, reloadAccounts,
+    <Ctx.Provider value={{ signedIn, email, me, setMe, accounts, categories, signIn, signOut, reloadAccounts,
       dataVersion, touchData: () => setDataVersion((v) => v + 1) }}>
       {children}
     </Ctx.Provider>

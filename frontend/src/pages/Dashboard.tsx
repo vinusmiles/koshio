@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { api } from "../lib/api";
 import { formatDate, formatINR, formatMonth, todayIST } from "../lib/format";
 import { useSession } from "../lib/session";
-import type { CategoryPoint, MonthPoint, Summary } from "../lib/types";
+import type { CategoryPoint, MonthPoint, SortGroups, Summary } from "../lib/types";
 import { useAsync } from "../lib/useAsync";
 import { ErrorNote } from "../components/Sheet";
 
@@ -25,6 +25,7 @@ export function Dashboard({ onAdd }: { onAdd: () => void }) {
   const summary = useAsync(() => api<Summary>("/dashboard/summary", { query }), key);
   const cats = useAsync(() => api<CategoryPoint[]>("/dashboard/categories", { query }), key);
   const monthly = useAsync(() => api<MonthPoint[]>("/dashboard/monthly"), [dataVersion]);
+  const toSort = useAsync(() => api<SortGroups>("/sorting/groups", { query: { limit: 1 } }), [dataVersion]);
 
   const s = summary.data;
   const nothingYet = monthly.data && monthly.data.every((m) => Number(m.expenses) === 0 && Number(m.income) === 0) && s?.transaction_count === 0;
@@ -49,6 +50,18 @@ export function Dashboard({ onAdd }: { onAdd: () => void }) {
       <ErrorNote message={summary.error} />
 
       {s && <Statement s={s} />}
+
+      {toSort.data && toSort.data.group_count > 0 && (
+        <Link to="/sort" className="card flex items-center justify-between gap-4 p-4 hover:border-ink">
+          <span>
+            <span className="block font-bold">{toSort.data.payment_count} payments still need a category</span>
+            <span className="block text-sm text-muted">
+              They go to {toSort.data.group_count} payee{toSort.data.group_count === 1 ? "" : "s"}. One tap each, and Koshio remembers them.
+            </span>
+          </span>
+          <span className="btn-primary shrink-0">Quick sort</span>
+        </Link>
+      )}
 
       {nothingYet ? (
         <section className="card p-6 sm:p-8">

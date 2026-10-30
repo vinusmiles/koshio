@@ -190,7 +190,8 @@ def test_axis_card_statement_with_cashback_column(client, auth):
         ("300.00", "credit", "refund"),         # cashback credit
     ]
     names = cat_names(client, auth)
-    assert names[p["rows"][2]["category_id"]] == "Loan and EMI payments"
+    # The card prints the merchant category (ELECTRONICS), so the EMI counts as Electronics spending.
+    assert names[p["rows"][2]["category_id"]] == "Electronics"
     commit(client, auth, card, "card_axis.pdf", "credit_card", password="TEST1234")
     s = summary(client, auth, start="2026-09-01", end="2026-09-30")
     assert Decimal(s["total_expenses"]) == Decimal("13099.00")  # 550 + 99 + 12000 + 450

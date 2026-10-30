@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
-from .routers import accounts, auth, dashboard, imports, transactions
+from .routers import accounts, auth, dashboard, imports, sorting, transactions
 
 settings = get_settings()
 if settings.environment == "production" and len(settings.jwt_secret) < 32:
@@ -48,5 +48,5 @@ def health():
     return {"status": "ok"}
 
 
-for r in (auth.router, accounts.router, transactions.router, dashboard.router, imports.router):
+for r in (auth.router, accounts.router, transactions.router, dashboard.router, imports.router, sorting.router):
     app.include_router(r)

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, json } from "../lib/api";
 import { formatDate, parseAmount, todayIST } from "../lib/format";
 import { useSession } from "../lib/session";
@@ -31,6 +31,14 @@ export function TransactionForm({ existing, onClose, onSaved }: {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // "Use this category for every payment to this payee", for imported transactions.
+  const [applyAll, setApplyAll] = useState(false);
+  const [payeeCount, setPayeeCount] = useState(0);
+  useEffect(() => {
+    if (!existing?.payee_key) return;
+    api<{ count: number }>("/sorting/payee-count", { query: { payee_key: existing.payee_key } })
+      .then((r) => setPayeeCount(r.count)).catch(() => {});
+  }, [existing?.payee_key]);
 
   const kind = CATEGORY_KIND[type];
   const cats = useMemo(() => categories.filter((c) => c.kind === kind), [categories, kind]);
@@ -75,6 +83,10 @@ export function TransactionForm({ existing, onClose, onSaved }: {
     try {
       if (existing) await api(`/transactions/${existing.id}`, { method: "PATCH", body: json(body) });
       else await api("/transactions", { method: "POST", body: json(body) });
+      if (applyAll && existing?.payee_key && categoryId && kind === "expense") {
+        await api("/sorting/apply", { method: "POST", body: json({
+          payee_key: existing.payee_key, category_id: Number(categoryId), only_uncategorised: false }) });
+      }
       onSaved();
     } catch (err) {
       setError((err as Error).message);
@@ -168,6 +180,12 @@ export function TransactionForm({ existing, onClose, onSaved }: {
               {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             {type === "refund" && <p className="mt-1 text-xs text-muted">Pick the category of the original purchase so the refund comes off it.</p>}
+            {existing?.payee_key && kind === "expense" && categoryId && (
+              <label className="mt-2 flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5 h-4 w-4" checked={applyAll} onChange={(e) => setApplyAll(e.target.checked)} />
+                <span>Use this category for {payeeCount > 1 ? `all ${payeeCount} payments` : "every payment"} to this payee, and in future statements</span>
+              </label>
+            )}
           </div>
         )}
 

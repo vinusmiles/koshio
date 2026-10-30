@@ -4,6 +4,7 @@ import { useSession } from "../lib/session";
 import { ACCOUNT_LABELS, type AccountType } from "../lib/types";
 import { ErrorNote } from "../components/Sheet";
 import { PdfHintsForm } from "../components/PdfHintsForm";
+import { AiSetting } from "../components/AiSetting";
 
 export function Accounts() {
   const { accounts, reloadAccounts } = useSession();
@@ -90,6 +91,10 @@ export function Accounts() {
       <section className="card p-5 space-y-3">
         <h2 className="text-lg font-bold">Locked statement PDFs</h2>
         <PdfHintsForm />
+      </section>
+      <section className="card p-5 space-y-3">
+        <h2 className="text-lg font-bold">Automatic categories</h2>
+        <AiSetting />
       </section>
       </div>
     </div>

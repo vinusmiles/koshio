@@ -3,10 +3,13 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+
+from .. import ai
 from ..config import get_settings
 from ..db import get_db
 from ..models import User
-from ..schemas import Credentials, LoginRequest, Token, UserOut
+from ..schemas import Credentials, LoginRequest, Token
 from ..security import create_token, current_user, hash_password, login_limiter, verify_password
 from ..seed import seed_new_user
 
@@ -53,6 +56,18 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     return Token(access_token=create_token(user.id))
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me")
 def me(user: User = Depends(current_user)):
-    return user
+    return {"id": user.id, "email": user.email, "ai_available": ai.available(),
+            "ai_categorise": user.ai_categorise}
+
+
+class SettingsIn(BaseModel):
+    ai_categorise: bool
+
+
+@router.patch("/me")
+def update_me(body: SettingsIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    user.ai_categorise = body.ai_categorise
+    db.commit()
+    return me(user)

@@ -51,7 +51,10 @@ export function Import() {
                 {b.records_failed > 0 && <span className="text-spend">, {b.records_failed} couldn't be read</span>}.</li>
             ))}
           </ul>
-          <Link to="/transactions?review=1" className="btn-quiet mt-3">Review imported transactions</Link>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link to="/sort" className="btn-primary">Sort uncategorised payments</Link>
+            <Link to="/transactions?review=1" className="btn-quiet">Review imported transactions</Link>
+          </div>
         </section>
       )}
 

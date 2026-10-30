@@ -48,6 +48,8 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(100))
+    # Ask the AI to suggest categories from merchant names (only works if the server has a key).
+    ai_categorise: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -120,6 +122,29 @@ class ImportIssue(Base):
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class PayeeRule(Base):
+    """"Payments to this payee are <category>", set by you in Quick sort or when editing.
+    Applied to every future import before any other guess."""
+    __tablename__ = "payee_rules"
+    __table_args__ = (UniqueConstraint("user_id", "payee_key", name="uq_payee_rule"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    payee_key: Mapped[str] = mapped_column(String(160))
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AiCategoryCache(Base):
+    """The AI's answer for a merchant name, so the same name is never sent twice."""
+    __tablename__ = "ai_category_cache"
+    __table_args__ = (UniqueConstraint("user_id", "name_key", name="uq_ai_cache"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name_key: Mapped[str] = mapped_column(String(160))
+    answer: Mapped[str] = mapped_column(String(60))  # a category name, "Person" or "Unknown"
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
     __table_args__ = (
@@ -175,6 +200,10 @@ class Transaction(Base):
     duplicate_of_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id", ondelete="SET NULL"))
     duplicate_group_id: Mapped[int | None] = mapped_column(Integer)
     fingerprint: Mapped[str | None] = mapped_column(String(64))
+    # Who was paid, as a stable key: the UPI ID when the statement shows one, otherwise the
+    # merchant name in lower case. Used to group payments and to remember your categories.
+    payee_key: Mapped[str | None] = mapped_column(String(160), index=True)
+    payee_kind: Mapped[str | None] = mapped_column(String(10))  # shop | person | None (unknown)
 
     is_reimbursement: Mapped[bool] = mapped_column(Boolean, default=False)
     is_recurring: Mapped[bool] = mapped_column(Boolean, default=False)

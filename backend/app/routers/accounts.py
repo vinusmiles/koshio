@@ -7,6 +7,7 @@ from ..db import get_db
 from ..models import Account, Category, Transaction, User
 from ..schemas import AccountIn, AccountOut, AccountUpdate, CategoryOut
 from ..security import current_user
+from ..seed import ensure_categories
 from .common import get_owned
 
 router = APIRouter(tags=["accounts"])
@@ -58,5 +59,7 @@ def delete_account(account_id: int, user: User = Depends(current_user), db: Sess
 
 @router.get("/categories", response_model=list[CategoryOut])
 def list_categories(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    ensure_categories(db, user.id)
+    db.commit()
     return db.scalars(select(Category).where(Category.user_id == user.id)
                       .order_by(Category.kind, Category.name)).all()
