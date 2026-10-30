@@ -1,0 +1,25 @@
+# Render Blueprint for the Koshio API (free web service).
+# The database is NOT on Render: free Render Postgres is deleted after 30 days.
+# Use Neon's free Postgres and paste its connection string as DATABASE_URL.
+services:
+  - type: web
+    name: koshio-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Runs any new database migrations, then starts the server.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENVIRONMENT
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false   # paste the Neon connection string in the Render dashboard
+      - key: CORS_ORIGINS
+        sync: false   # e.g. https://vinusmiles.github.io
